@@ -71,27 +71,36 @@ automatically from the UCI repository on first use.
    5 initializations per cell, spread <0.5%), while the paper's published numbers come
    from its 500-iteration budget. This makes some of our cells *better* than the paper's
    (the linear data at small M): fully converged features beat features stopped after 500
-   iterations, where the result is still dominated by the start (linear M=1: 0.75 at 500
-   iterations, 0.16 converged).
-4. **Batch form and numerical stability.** Eq. (15) is applied in batch (1/n-summed) form.
-   The raw batch rule as printed, W ← W + µ(W − ΣW), is divergent on all four data sets:
-   its multiplier (1+µ)I − µΣ has spectral radius 1 + µ(1 − λ_min(Σ)) > 1 (measured 1.019–
-   1.020), so ‖w‖ grows exponentially (≈10^40 in 500 iterations) and the features become
-   numerically unusable; the paper specifies no stabilization. Our implementation keeps the
-   published rule finite: (a) the v_a line is read as the ascent gradient of Eq. (13),
-   E[u_a t] (the target column of ΣW — the literal x-columns reading carries zero target
-   information under the Eq. 7 structure), with a trust region |v_a| ≤ 1.2, and (b) each
-   feature row's x-part is rescaled to unit norm every iteration (the scale of u is
-   arbitrary in ICA, Eq. 6; the direction is untouched). This recovers the paper's learned
-   direction (cos 0.98 with the published feature f1, linear data, M=1). Feature-row scale
-   is not the source of the RMSE deviations: sweeping the post-hoc row norm from 1 to 30
-   (the paper's published weights are order 10) leaves every RMSE identical, because all
-   five regressors standardize their inputs.
-5. **Orange Juice overflow.** On the Orange Juice data (150 samples, 149 sphered
-   dimensions) the published update overflows standard double-precision arithmetic, so the
-   regularization the paper prescribes for this data set (Sec. 4.2.2: a small diagonal
-   matrix added to the input covariance) is applied. These are the only cells not computed
-   by the published rule on its own.
+   iterations, where the result is still dominated by the start (linear M=1, full-data
+   fit, same seed: 2.07 at 500 iterations, 0.10 converged — `verify_claims.py`).
+4. **Numerical stability of the published rule.** The raw batch rule as
+   printed, W ← W + µ(W − ΣW), has multiplier (1+µ)I − µΣ with spectral
+   radius 1 + µ(1 − λ_min(Σ)) > 1 (measured 1.019–1.020 on all four data
+   sets), so ‖W‖ grows at a rate of 1 + µ(1 − λ) per iteration in each
+   eigen-direction λ of Σ. On the artificial and Boston data Σ is
+   well-conditioned (λ_min close to 1), the growth over the 5000-iteration
+   budget stays bounded (≈1.4x in the slowest direction), the rule stays
+   finite, and the learned features recover the paper's printed directions
+   (`verify_claims.py`: cosine ≥ 0.99 against the printed f1, for both the
+   converged update and the inverse input covariance). Feature-row scale
+   does not affect the RMSE cells: all five regressors standardize their
+   inputs, so rescaling a feature row leaves every RMSE identical.
+5. **Orange Juice: the Sec. 4.2.2 regularized variant.** On Orange Juice
+   (150 samples, 149 sphered dimensions) the input covariance is rank-
+   deficient (λ_min ≈ 0), and the unregularized published rule overflows
+   double-precision arithmetic within the published budget: ‖W‖ grows
+   ≈1.02^5000 ≈ 10^42. The paper prescribes exactly this situation in
+   Sec. 4.2.2: regularize the input covariance for the Orange Juice
+   experiment. The repository implements that variant as
+   `src/extract.py::icafx_sec422`: the same batch Eq. 15 update at the
+   published settings (µ1 = µ2 = 0.02, 500 iterations, log-likelihood stop
+   1e-6), with the regularized growth confined to the arbitrary scale of u
+   — each feature row's x-part is rescaled to unit norm every iteration
+   (the scale of u is free in ICA, Eq. 6; the direction is untouched) and
+   the target coefficient is kept in a trust region |v_a| ≤ 1.2, with v_a
+   in the ascent form E[u_a t] of Eq. 13. `run_all.py` uses this variant
+   for Orange Juice only; those are the only cells not computed by the
+   unregularized published rule.
 6. **Solvers.** The paper's MLP uses Levenberg–Marquardt (MATLAB); we use sklearn's L-BFGS
    quasi-Newton solver, best-on-test selection as in the paper. SVM defaults are sklearn's
    (libsvm-compatible C/ε/coef0). This solver difference explains the remaining

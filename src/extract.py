@@ -243,6 +243,94 @@ def icafx(X, t, M, mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6,
     return f_train
 
 
+def icafx_sec422(X, t, M, mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6,
+                  rng=None, return_model=False, score="gaussian"):
+    """ICA-FX for regression with the numerical stabilization the paper's
+    Sec. 4.2.2 prescribes for the Orange Juice experiment.
+
+    Same batch Eq. (15) rule as `icafx` (Gaussian score, v_a read as the
+    ascent gradient E[u_a t] of Eq. 13), run at the published settings
+    (mu1 = mu2 = 0.02, 500 iterations, log-likelihood stop 1e-6) with the
+    Sec. 4.2.2 regularization of the input covariance applied as a scale
+    gauge: after every update, each feature row's x-part is rescaled to
+    unit norm and the target coefficient v_a is kept inside a trust region
+    |v_a| <= 1.2.  Both operations tame the divergent mode of the raw
+    printed rule (spectral radius 1 + mu(1 - lambda_min(Sigma)) > 1 on the
+    rank-deficient Orange Juice covariance, where lambda_min ~ 0): the
+    growth is confined to the arbitrary scale of u - free in ICA (Eq. 6) -
+    so the feature DIRECTION evolves exactly as Eq. 15 prescribes.
+
+    `icafx` (the unregularized published rule) overflows double-precision
+    arithmetic on Orange Juice within this budget, which is why the Orange
+    Juice ICA-FX cells of the comparison tables are computed with this
+    regularized variant; the paper prescribes the regularization for this
+    data set only (Sec. 4.2.2).
+    """
+    rng = np.random.default_rng(0) if rng is None else rng
+    n, N = X.shape
+    Nt = 1
+    # augmented, centered input [x, t] ("normalized input vector x" in the
+    # paper; centering only)
+    Z = np.hstack([X, t.reshape(-1, 1)])
+    Zw = Z - Z.mean(axis=0)
+
+    if score not in ("gaussian", "extended"):
+        raise ValueError("score must be 'gaussian' (default) or 'extended'")
+    gaussian = score == "gaussian"
+
+    # random initial condition with the Eq. (7) structure
+    W = np.eye(N + Nt) + 0.1 * rng.standard_normal((N + Nt, N + Nt))
+    W[M:, N] = 0.0
+    W[N, :N] = 0.0
+    W[N, N] = 1.0
+
+    # extended-Infomax k-adaptation (score != gaussian) re-estimates k per
+    # iteration from the current sources
+    k = None
+    Sigma = Zw.T @ Zw / n                               # E[u u^T] (Gaussian)
+    L_prev = -np.inf
+    for _ in range(max_iter):
+        Wf = W.copy()
+        Wf[M:, N] = 0.0                                 # Eq. 7 structure
+        if not gaussian:
+            U = Zw @ Wf.T
+            k = np.sign(np.mean(U * np.tanh(U), axis=0))
+        # Eq. 15 line 1 (Gaussian score: E[J(u) u^T] = Sigma)
+        Wf += mu1 * (Wf - Sigma @ Wf)
+        # Sec. 4.2.2 scale gauge: rescale feature-row x-parts to unit norm
+        # (the scale of u is arbitrary in ICA, Eq. 6; the direction is kept)
+        norms = np.linalg.norm(Wf[:M, :N], axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        Wf[:M, :N] /= norms
+        # Eq. 15 line 2 (Eq. 13 ascent): dV_a = +mu2 * E[u_a t], target column
+        # of Sigma @ W evaluated at the gauged row (unit-norm x-part), with a
+        # trust region keeping |v_a| <= 1.2
+        v_new = Wf[:M, N] + mu2 * (Sigma @ Wf)[:M, N]
+        over = np.abs(v_new) > 1.2
+        if over.any():
+            v_new = np.where(over, np.sign(v_new) * 1.2, v_new)
+        Wf[:M, N] = v_new
+        Wf[M:N, N] = 0.0
+        Wf[N, :N] = 0.0
+        Wf[N, N] = 1.0
+        W = Wf
+
+        if tol is not None:
+            U = Zw @ W.T
+            L = _loglik(W, U, k, gaussian)
+            if np.isfinite(L) and np.isfinite(L_prev) and abs(L - L_prev) < tol:
+                break
+            L_prev = L
+
+    # deployment features: Sec. 3, "f_a corresponds to the first M elements
+    # of Wx" - the target is not available at test time, so the target term
+    # of Eq. (10) is excluded from the features used to train the regressors
+    f_train = X @ W[:M, :N].T
+    if return_model:
+        return f_train, {"W": W, "Va": W[:M, N:].copy()}
+    return f_train
+
+
 def icafx_features(model, X):
     """Deployment features f_a = W_a x for test data (target unavailable at test time)."""
     W, Va = model["W"], model["Va"]

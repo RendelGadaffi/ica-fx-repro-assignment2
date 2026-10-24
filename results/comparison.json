@@ -977,9 +977,9 @@
     {
       "method": "ICA-FX",
       "M": 1,
-      "ours": NaN,
-      "ours_sd": NaN,
-      "ours_best": NaN,
+      "ours": 8.73,
+      "ours_sd": 0.39,
+      "ours_best": 0.0,
       "paper": 8.51,
       "paper_sd": 1.34,
       "paper_best": 7.13,
@@ -988,9 +988,9 @@
     {
       "method": "ICA-FX",
       "M": 5,
-      "ours": NaN,
-      "ours_sd": NaN,
-      "ours_best": NaN,
+      "ours": 5.38,
+      "ours_sd": 0.32,
+      "ours_best": 0.0,
       "paper": 7.88,
       "paper_sd": 0.97,
       "paper_best": 7.0,
@@ -999,24 +999,24 @@
     {
       "method": "ICA-FX",
       "M": 9,
-      "ours": NaN,
-      "ours_sd": NaN,
-      "ours_best": NaN,
+      "ours": 3.79,
+      "ours_sd": 0.28,
+      "ours_best": 0.0,
       "paper": 7.85,
       "paper_sd": 0.91,
       "paper_best": 6.27,
-      "cross": false
+      "cross": true
     },
     {
       "method": "ICA-FX",
       "M": 13,
-      "ours": NaN,
-      "ours_sd": NaN,
-      "ours_best": NaN,
+      "ours": 3.35,
+      "ours_sd": 0.29,
+      "ours_best": 0.0,
       "paper": 8.01,
       "paper_sd": 0.96,
       "paper_best": 6.15,
-      "cross": false
+      "cross": true
     }
   ]
 }

@@ -22,13 +22,20 @@ from sklearn.model_selection import KFold, train_test_split
 from joblib import Parallel, delayed
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-from extract import pca, mlr, sir, phd, icafx, icafx_features, sphering, standardizer, apply_std  # noqa: E402
+from extract import (pca, mlr, sir, phd, icafx, icafx_sec422, icafx_features,
+                     sphering, standardizer, apply_std)  # noqa: E402
 from regress import run_regressors, summarize, METHODS5  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 SEED = 42
+# Faithful Eq. (15) cells (artificial + Boston): run to convergence within the
+# 5000-iteration budget, log-likelihood stop of Eq. 12 (README note 3).
 ICA_FX_PARAMS = dict(mu1=0.02, mu2=0.02, max_iter=5000, tol=1e-6)
+# Orange Juice: Sec. 4.2.2 regularized variant at the published budget
+# (500 iterations); the unregularized rule overflows on this data set
+# (README note 5).
+ICA_FX_PARAMS_OJ = dict(mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6)
 EXTRACTORS = {"PCA": pca, "MLR": mlr, "SIR": sir, "PHD": phd}
 
 
@@ -118,10 +125,15 @@ def run_cell(ds_name, method, M, ds, verbose=False):
                 Xtr_s, Xte_s = Xtr_s @ S, Xte_s @ S
             if method == "ICA-FX":
                 Ftr_l, Fte_l = [], []
+                # Orange Juice (sphere=True): Sec. 4.2.2 regularized variant at
+                # the published 500-iteration budget; the unregularized published
+                # rule overflows on this data set (README notes 4-5).
+                fx, fx_params = (icafx_sec422, ICA_FX_PARAMS_OJ) if ds["sphere"] \
+                    else (icafx, ICA_FX_PARAMS)
                 for init in range(n_inits):
                     rng = np.random.default_rng(1000 * (split_idx + 1) + init)
-                    f_tr, model = icafx(Xtr_s, ttr_s, M, rng=rng, return_model=True,
-                                        **ICA_FX_PARAMS)
+                    f_tr, model = fx(Xtr_s, ttr_s, M, rng=rng, return_model=True,
+                                     **fx_params)
                     Ftr_l.append((f_tr, icafx_features(model, Xte_s)))
                 # average the 5-method RMSE over inits (std across inits kept in JSON)
                 per_init = []

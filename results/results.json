@@ -523,27 +523,27 @@
       "avg_std_per_fold": NaN
     },
     "ICA-FX|1": {
-      "avg": NaN,
-      "std": NaN,
-      "best": NaN,
+      "avg": 8.727527990322884,
+      "std": 0.38729240432162954,
+      "best": 0.0,
       "avg_std_per_fold": NaN
     },
     "ICA-FX|5": {
-      "avg": NaN,
-      "std": NaN,
-      "best": NaN,
+      "avg": 5.382592163412807,
+      "std": 0.32386931612780556,
+      "best": 0.0,
       "avg_std_per_fold": NaN
     },
     "ICA-FX|9": {
-      "avg": NaN,
-      "std": NaN,
-      "best": NaN,
+      "avg": 3.7893357055016503,
+      "std": 0.27933620533703374,
+      "best": 0.0,
       "avg_std_per_fold": NaN
     },
     "ICA-FX|13": {
-      "avg": NaN,
-      "std": NaN,
-      "best": NaN,
+      "avg": 3.352461474138019,
+      "std": 0.2905745808825059,
+      "best": 0.0,
       "avg_std_per_fold": NaN
     },
     "MLR|1": {
