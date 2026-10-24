@@ -1,0 +1,32 @@
+
+Orange Juice near-infrared spectra 
+This database has been provided by Prof. Marc Meurens, Université catholique de Louvain, BNUT unit. Please acknowledge the origin of this database if you use it and/or publish about it.
+
+Goal: 
+To estimate the level of saccharose of an orange juice from its observed near-infrared spectrum.
+
+Learning set
+=========
+INPUT
+
+File name: OJ_x_learning.txt
+Description: 150 spectra (lines), sampled with 700 points (columns)
+
+OUTPUT
+File name: OJ_y_learning.txt
+Description: Corresponding level of saccharose, in a column vector (150 lines).
+
+Test set
+======
+INPUT
+
+File name: OJ_x_test.txt
+Description: 68 spectra (lines), sampled with 700 points (columns)
+
+OUTPUT
+File name: OJ_y_test.txt
+Description: Corresponding level of saccharose, in a column vector (68 lines).
+
+
+
+
