@@ -829,7 +829,7 @@
       "paper": 10.34,
       "paper_sd": null,
       "paper_best": 8.1,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PCA",
@@ -851,7 +851,7 @@
       "paper": 11.07,
       "paper_sd": null,
       "paper_best": 9.1,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PCA",
@@ -862,7 +862,7 @@
       "paper": 10.37,
       "paper_sd": null,
       "paper_best": 8.15,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PCA",
@@ -873,7 +873,7 @@
       "paper": 10.45,
       "paper_sd": null,
       "paper_best": 8.55,
-      "cross": false
+      "cross": true
     },
     {
       "method": "MLR",
@@ -884,7 +884,7 @@
       "paper": 9.42,
       "paper_sd": null,
       "paper_best": 7.46,
-      "cross": false
+      "cross": true
     },
     {
       "method": "SIR",
@@ -895,7 +895,7 @@
       "paper": 10.56,
       "paper_sd": null,
       "paper_best": 9.32,
-      "cross": false
+      "cross": true
     },
     {
       "method": "SIR",
@@ -906,7 +906,7 @@
       "paper": 10.78,
       "paper_sd": null,
       "paper_best": 9.14,
-      "cross": false
+      "cross": true
     },
     {
       "method": "SIR",
@@ -917,7 +917,7 @@
       "paper": 10.21,
       "paper_sd": null,
       "paper_best": 6.97,
-      "cross": false
+      "cross": true
     },
     {
       "method": "SIR",
@@ -928,7 +928,7 @@
       "paper": 10.45,
       "paper_sd": null,
       "paper_best": 8.45,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PHD",
@@ -939,7 +939,7 @@
       "paper": 12.5,
       "paper_sd": null,
       "paper_best": 9.18,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PHD",
@@ -950,7 +950,7 @@
       "paper": 10.93,
       "paper_sd": null,
       "paper_best": 9.36,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PHD",
@@ -961,7 +961,7 @@
       "paper": 10.62,
       "paper_sd": null,
       "paper_best": 8.68,
-      "cross": false
+      "cross": true
     },
     {
       "method": "PHD",
@@ -972,7 +972,7 @@
       "paper": 10.39,
       "paper_sd": null,
       "paper_best": 8.25,
-      "cross": false
+      "cross": true
     },
     {
       "method": "ICA-FX",

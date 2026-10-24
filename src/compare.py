@@ -36,6 +36,11 @@ def main():
                 flag = False
                 if p_sd:
                     flag = abs(ours["avg"] - p_avg) > 3 * p_sd
+                elif p_avg > 0:
+                    # No SD published (Table 4 baselines): 3-sigma is undefined;
+                    # flag any cell whose values differ by more than a factor 2
+                    # (in either direction).
+                    flag = (ours["avg"] > 2.0 * p_avg) or (p_avg > 2.0 * ours["avg"])
                 out[ds_name].append({
                     "method": method, "M": int(M),
                     "ours": round(ours["avg"], 2), "ours_sd": round(ours["std"], 2),
