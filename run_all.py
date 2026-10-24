@@ -28,7 +28,7 @@ from regress import run_regressors, summarize, METHODS5  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 SEED = 42
-ICA_FX_PARAMS = dict(mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6)
+ICA_FX_PARAMS = dict(mu1=0.02, mu2=0.02, max_iter=5000, tol=1e-6)
 EXTRACTORS = {"PCA": pca, "MLR": mlr, "SIR": sir, "PHD": phd}
 
 

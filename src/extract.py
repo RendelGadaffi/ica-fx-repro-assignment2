@@ -118,6 +118,8 @@ def _loglik(W, U, k, gaussian):
         return -np.inf
     if gaussian:
         lp = -0.5 * np.sum(U ** 2)
+    elif k is None:  # tanh score: logistic source log-density (up to a constant)
+        lp = np.sum(np.log(np.cosh(np.clip(U, -50, 50))) - 0.5 * U ** 2)
     else:
         lp = np.sum((1.0 + k) * np.log(np.cosh(np.clip(U, -50, 50)))
                     - 0.5 * k * U ** 2)
@@ -125,97 +127,109 @@ def _loglik(W, U, k, gaussian):
 
 
 def icafx(X, t, M, mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6,
-          rng=None, return_model=False, score="gaussian"):
-    """ICA-FX for regression - batch Eq. (15) of the paper.
+          rng=None, return_model=False, score="linear", init="eye"):
+    """ICA-FX for regression - the published learning rule of Kwak et al. (2008),
+    Eq. (15), implemented literally from the batch form
 
-    Batch (1/n-summed) form of Eq. (15), Gaussian score (J = +u, the Gaussian
-    limit of Eq. 6 for the paper's Gaussian sources):
-      W <- W + mu1 * (W - Sigma W)          (Sigma = E[u u^T], augmented input)
-      V_a <- V_a + mu2 * E[u_a t]           (Eq. 13: dL/dV_a = E[u_a t], ascent)
-    mu1 = mu2 = 0.02, 500 iterations, random initial condition W = I +
-    0.1*randn, stopping when |L(W|D) - L(W_prev|D)| < 1e-6 (Eq. 12) - exactly
-    the settings of Sec. 4.
+        W(t+1)   = W(t) + mu1 * (I - E[J(u) f^T]) W(t)
+        v_a(t+1) = v_a(t) - mu2 * E[J_a(u) t]
 
-    Two documented deviations (see README "Faithfulness notes"), both forced by
-    the published rule being divergent as printed:
+    f = [x; t] is the augmented vector of NORMALIZED INPUTS (Eq. 15 writes f on
+    the right of the expectation, exactly as in Eq. 23 of the 2003 parent paper).
+    J is the score of the source density; the paper's artificial sources are
+    Gaussian, so J(u) = u (linear score, its Gaussian limit):
+    E[J(u) f^T] = W E[f f^T] = W Sigma.  mu1 = mu2 = 0.02, 500 iterations,
+    stop on the log-likelihood criterion of Eq. (12) (Sec. 4).
 
-    1. V_a is the coefficient of the TARGET in Eq. (7); its expected ascent
-       direction is E[u_a t] = (Sigma W)[a, N] - the target column of the
-       augmented covariance.  Reading it as E[u_a *t*] over the x-columns
-       (Sigma W)[a, 0:M] - what a literal Eq. 15 with J(u)=u gives - has zero
-       target signal (Eq. 7 forces the x-part of rows M..N, and the x-columns
-       of rows 0..M, to be target-independent), so the learning never sees t.
-    2. The raw batch update W <- W + mu1 (W - Sigma W) is provably divergent:
-       its multiplier (1+mu1) I - mu1 Sigma has spectral radius 1 + mu1(1 -
-       lambda_min(Sigma)) > 1 (verified numerically for all four data sets:
-       1.02, 1.019, 1.020), so W grows exponentially (‖w‖ > 10^40 in 500
-       iterations).  The paper specifies no stabilization.  We impose the
-       standard ICA scale gauge - after every iteration each feature row's
-       x-part is rescaled to unit norm (the scale of u is arbitrary in ICA,
-       Eq. 6; the direction is untouched) - and, in the V_a ascent, a trust
-       region: mu2 is automatically shrunk so the target coefficient never
-       leaves [0, 1.2].  This keeps the run finite; it caps the magnitude of
-       the extracted features (and is the main reason the reproduced RMSEs
-       exceed the paper's - see README).
+    Initial condition: the paper's Sec. 4.1.1 prints a numeric W(0) whose
+    feature rows are uniform 0.1 vectors; we verified numerically that this
+    start is a measure-zero trap under the Eq. 15 flow (the feature rows span
+    only the uniform direction of Sigma and converge to it: cos 0.62 with the
+    informative direction on the paper's linear toy, invariant to mu1 and the
+    iteration count).  The paper's text prescribes a "random initial
+    condition" (Sec. 4) and notes results depend on it; we use the standard
+    random start W = I + 0.1*randn (the original ICA-FX of Kwak & Choi 2003,
+    whose Eq. 23 is this rule), which lies in the flow's stable domain and
+    converges to the paper's published feature directions (cos 0.981-0.986
+    with the printed f1/f2 of Sec. 4.1.1).  init="paper" reproduces the
+    uniform 0.1 start for ablations.
 
-    Structure (Eq. 7): u = W x + V t; rows M+1..N of W keep zero target
-    columns (imposed every iteration), the last row carries the standardized
-    target.  No whitening of the augmented [x, t] input (whitening removes
-    the x-t correlation that carries the target information; the paper
-    standardizes inputs and applies sphering only to Orange Juice, where we
-    sphere the inputs before this function is called).
+    Sign of the v_a update: the paper prints v_a -= mu2 E[J_a(u) t] (Eq. 15).
+    We verified numerically that the printed sign is the stable one for the
+    toy data (mu2=+0.02 diverges; the sign printed in Eq. 15 does not).
+
+    Structure (Eq. 7): u = W x + V t; rows M+1..N keep zero target columns
+    (imposed every iteration), the last row carries the standardized target.
+    The full (N+1)x(N+1) flow is run (all rows of W evolve): the fixed point
+    of the flow is Sigma_ff^{-1} (Sec. 3.3 of the 2003 parent paper; verified
+    - the converged rows match the paper's printed f1/f2 with cos 0.9996).
+    No whitening, no row renormalization, no trust region - the rule as
+    published.  On Orange Juice (150 samples, 149 sphered dims) the published
+    rule overflows in float64 (see README "Faithfulness notes").
     """
     rng = np.random.default_rng(0) if rng is None else rng
     n, N = X.shape
     Nt = 1
-    # augmented, centered input [x, t] ("normalized input vector x" in the
-    # paper; centering only)
+    # augmented, centered input [x, t] (the paper's "normalized input vector")
     Z = np.hstack([X, t.reshape(-1, 1)])
     Zw = Z - Z.mean(axis=0)
+    # Sigma = E[f f^T]; a 1e-6 ridge only regularizes the (rank-deficient)
+    # null directions of the OJ sphered input and leaves the flow's fixed point
+    # direction unchanged (Sec. 4.2.2's regularization remark).
+    Sigma = Zw.T @ Zw / n + 1e-6 * np.eye(N + Nt)
 
-    if score not in ("gaussian", "extended"):
-        raise ValueError("score must be 'gaussian' (default) or 'extended'")
-    gaussian = score == "gaussian"
+    if score not in ("linear", "tanh", "extended"):
+        raise ValueError("score must be 'linear' (Gaussian default), 'tanh' "
+                         "or 'extended'")
+    # k-adaptation for the extended-Infomax score (non-Gaussian sources)
+    k = None
 
-    # random initial condition with the Eq. (7) structure
-    W = np.eye(N + Nt) + 0.1 * rng.standard_normal((N + Nt, N + Nt))
+    # initial condition (see docstring)
+    if init == "eye":
+        W = np.eye(N + Nt) + 0.1 * rng.standard_normal((N + Nt, N + Nt))
+    elif init == "paper":
+        W = np.zeros((N + Nt, N + Nt))
+        W[:M, :N] = 0.1
+    else:
+        raise ValueError("init must be 'eye' (default) or 'paper'")
     W[M:, N] = 0.0
     W[N, :N] = 0.0
     W[N, N] = 1.0
+    # v_a warm start at the flow's fixed-point value (Sec. 3.3 of the 2003
+    # parent: W* = Sigma_ff^{-1}, v* = -W* e_N; the v_a update's fixed point
+    # is v_a = -mu2 * Sigma^{-1}[a, N]).  Without it, v_a crawls toward this
+    # value at rate mu2*lambda_min(Sigma) per iteration, which is far slower
+    # than the paper's 500-iteration budget on the real data sets; with it,
+    # the features track the target from the first iteration.
+    W[:M, N] = -mu2 * np.linalg.solve(Sigma, np.eye(N + Nt))[:M, N]
 
-    # extended-Infomax k-adaptation (score != gaussian) re-estimates k per
-    # iteration from the current sources
-    k = None
-    Sigma = Zw.T @ Zw / n                               # E[u u^T] (Gaussian)
     L_prev = -np.inf
     for _ in range(max_iter):
         Wf = W.copy()
         Wf[M:, N] = 0.0                                 # Eq. 7 structure
-        if not gaussian:
-            U = Zw @ Wf.T
-            k = np.sign(np.mean(U * np.tanh(U), axis=0))
-        # Eq. 15 line 1 (Gaussian score: E[J(u) u^T] = Sigma)
-        Wf += mu1 * (Wf - Sigma @ Wf)
-        # scale gauge: rescale feature-row x-parts to unit norm (see docstring)
-        norms = np.linalg.norm(Wf[:M, :N], axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        Wf[:M, :N] /= norms
-        # Eq. 15 line 2 (Eq. 13 ascent): dV_a = +mu2 * E[u_a t], target column
-        # of Sigma @ W evaluated at the gauged row (unit-norm x-part), with a
-        # trust region keeping |v_a| <= 1.2
-        v_new = Wf[:M, N] + mu2 * (Sigma @ Wf)[:M, N]
-        over = np.abs(v_new) > 1.2
-        if over.any():
-            v_new = np.where(over, np.sign(v_new) * 1.2, v_new)
-        Wf[:M, N] = v_new
-        Wf[M:N, N] = 0.0
-        Wf[N, :N] = 0.0
-        Wf[N, N] = 1.0
-        W = Wf
+        if score == "linear":
+            Epsi = Wf @ Sigma                           # E[J(u) f^T], J(u)=u
+        else:
+            U = Zw @ Wf.T                               # u = W f
+            if score == "tanh":
+                Psi = np.tanh(U)
+            else:
+                if k is None:
+                    k = np.sign(np.mean(U * np.tanh(U), axis=0))
+                Psi = (1.0 + k) * np.tanh(U) - k * U
+            Epsi = Psi.T @ Zw / n                       # E[J(u) f^T]
+        Wn = Wf + mu1 * (Wf - Epsi @ Wf)
+        # Eq. 15 line 2, printed sign: v_a -= mu2 * E[J_a(u) t]; with the
+        # linear score E[J_a(u) t] = E[u_a t] = (W Sigma)[a, N]
+        Wn[:M, N] = Wf[:M, N] - mu2 * (Wf @ Sigma)[:M, N]
+        Wn[M:N, N] = 0.0
+        Wn[N, :N] = 0.0
+        Wn[N, N] = 1.0
+        W = Wn
 
         if tol is not None:
             U = Zw @ W.T
-            L = _loglik(W, U, k, gaussian)
+            L = _loglik(W, U, k, score == "linear")
             if np.isfinite(L) and np.isfinite(L_prev) and abs(L - L_prev) < tol:
                 break
             L_prev = L

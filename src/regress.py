@@ -21,7 +21,7 @@ from sklearn.svm import SVR
 HIDDEN = [2, 4, 6, 8, 10, 15, 20]
 DEGREES = [1, 2, 3]
 KNN_KS = [1, 3, 5]
-MLP_SEEDS = [0]
+MLP_SEEDS = [0, 1, 2, 3, 4]
 
 
 def _rmse(y_true, y_pred):
@@ -43,7 +43,18 @@ def run_regressors(Xtr, ytr, Xte, yte):
     raw-scale RMSE out).  ytr/yte are raw-scale targets; internal scaling is
     handled here.
     """
-    # standardize features
+    # standardize features (M=1 features arrive 1-D -> reshape to a column)
+    if np.ndim(Xtr) == 1:
+        Xtr = Xtr.reshape(-1, 1)
+    if np.ndim(Xte) == 1:
+        Xte = Xte.reshape(-1, 1)
+    # Non-finite features (the published ICA-FX rule overflows on data sets
+    # whose E[f f^T] has lambda_max > 1 + 2/mu1, e.g. OJ with 149 sphered
+    # dims): return NaN cells instead of crashing; documented in README.
+    if not (np.isfinite(Xtr).all() and np.isfinite(Xte).all()):
+        return {"MLP": float("nan"), "SVM": float("nan"),
+                "1-NN": float("nan"), "3-NN": float("nan"),
+                "5-NN": float("nan"), "best": float("nan")}
     mu_x, sd_x = Xtr.mean(axis=0), Xtr.std(axis=0)
     sd_x = np.where(sd_x == 0, 1.0, sd_x)
     Xtr_s, Xte_s = (Xtr - mu_x) / sd_x, (Xte - mu_x) / sd_x
