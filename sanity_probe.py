@@ -1,4 +1,4 @@
-"""Sanity checks for icafx with the random init (handoff step 3).
+"""Sanity checks for icafx with the random init.
 
 Linear toy M=1: cos with the informative direction [2,0,3,0,0] ~ 0.999.
 Boston M=1: finite, cos with OLS direction ~ 1.
