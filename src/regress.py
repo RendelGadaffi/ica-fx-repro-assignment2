@@ -3,7 +3,7 @@
 - MLP: one hidden layer, hidden nodes in {2,4,6,8,10,15,20}, tanh hidden
   activation (paper uses tansig), linear output (purelin).  The paper trains
   with Levenberg-Marquardt (trainlm); we use sklearn's lbfgs, the closest
-  quasi-Newton analogue, over 3 inits and keep the best test RMSE per hidden
+  quasi-Newton analogue, over 5 inits and keep the best test RMSE per hidden
   size (the paper selects the best hidden size on the test data).
 - SVM: SVR, polynomial kernels of degree 1, 2, 3, all other parameters at
   library defaults (C=1, epsilon=0.1, coef0=0, gamma='scale'), best on test.

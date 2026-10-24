@@ -24,10 +24,32 @@ python3 -m venv venv
 
 `run_all.py` writes `results/results.json` (raw RMSE numbers for every
 method × number-of-features cell of the paper's Tables 1–4).
+`--datasets` selects data sets (any subset of `linear nonlinear boston oj`);
+`--jobs` sets the number of parallel workers. Results for the datasets you
+run are merged into the existing `results.json`.
 The Orange Juice data files (`data/OJ_*.txt`) were retrieved from the Wayback Machine
 from the authors' cited UCL source (snapshot 2004-12-28,
 `http://www.dice.ucl.ac.be/mlg/DataBases/ORANGE_JUICE/`); Boston Housing is downloaded
 automatically from the UCI repository on first use.
+
+### Parameters you can change
+
+All defaults follow the paper (Sec. 4.1.1 / Sec. 4). Every setting lives in the code:
+
+| Parameter | Default (paper setting) | Where |
+|---|---|---|
+| `mu1`, `mu2` (learning rates) | 0.02, 0.02 | `run_all.py`: `ICA_FX_PARAMS`, `ICA_FX_PARAMS_OJ` |
+| `max_iter`, `tol` (convergence) | 5000 / 1e-6 (Tables 1–3); 500 / 1e-6 (OJ, Sec. 4.2.2 variant) | `run_all.py`: `ICA_FX_PARAMS`, `ICA_FX_PARAMS_OJ` |
+| `M` (features extracted) | linear/nonlinear 1–5; Boston 1–13; OJ 1,5,9,13 | `run_all.py`: `get_dataset` (`fc` dicts) |
+| Random seed | 42 (all splits and inits; ICA-FX inits derive as `1000·split + init`) | `run_all.py`: `SEED` |
+| Train/test protocol | 10-fold CV; ten 90/10 splits; fixed 150/68 (OJ) | `run_all.py`: `get_dataset` (`splits`) |
+| SIR slices | 10 (unspecified in paper) | `src/extract.py`: `sir(n_slices=...)` |
+| OJ sphering ridge | 1e-9 | `run_all.py`: `run_cell` (`sphering(reg=...)`) |
+| MLP hidden nodes / inits | {2,4,6,8,10,15,20} / 5 seeds, best on test | `src/regress.py`: `HIDDEN`, `MLP_SEEDS` |
+| SVM kernel degrees / defaults | poly degree 1/2/3 (`DEGREES`); C=1, ε=0.1, coef0=0, gamma='scale' | `src/regress.py`: `DEGREES`; sklearn defaults |
+| k-NN k values (Eq. 16) | {1,3,5} | `src/regress.py`: `KNN_KS` |
+
+`verify_claims.py` checks the quantitative claims in the notes below.
 
 ## What is implemented
 
