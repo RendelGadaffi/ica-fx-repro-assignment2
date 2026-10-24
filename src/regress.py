@@ -21,7 +21,7 @@ from sklearn.svm import SVR
 HIDDEN = [2, 4, 6, 8, 10, 15, 20]
 DEGREES = [1, 2, 3]
 KNN_KS = [1, 3, 5]
-MLP_SEEDS = [0, 1, 2]
+MLP_SEEDS = [0]
 
 
 def _rmse(y_true, y_pred):
@@ -57,8 +57,8 @@ def run_regressors(Xtr, ytr, Xte, yte):
     for h in HIDDEN:
         for seed in MLP_SEEDS:
             m = MLPRegressor(hidden_layer_sizes=(h,), activation="tanh",
-                             solver="lbfgs", alpha=1e-4, max_iter=2000,
-                             tol=1e-6, random_state=seed)
+                             solver="lbfgs", alpha=1e-4, max_iter=1000,
+                             tol=1e-5, random_state=seed)
             m.fit(Xtr_s, ytr_s)
             r = _rmse(yte_s, m.predict(Xte_s))
             best = min(best, r)
@@ -84,13 +84,19 @@ def summarize(res_list):
 
     paper_avg  : mean over folds of (mean over the 5 methods)
     paper_std  : mean over the 5 methods of the std across folds
+                 (for single-split data sets: std across ICA-FX inits, when present)
     paper_best : mean over folds of (min over the 5 methods)  (table row 2)
     """
     M = np.array([[r[m] for m in METHODS5] for r in res_list])  # (folds, 5)
     avg_per_fold = M.mean(axis=1)
+    init_std = [r["_init_std"] for r in res_list if "_init_std" in r]
+    if init_std:
+        std = float(np.mean(init_std))
+    else:
+        std = float(M.std(axis=0).mean()) if len(avg_per_fold) > 1 else float("nan")
     return {
         "avg": float(avg_per_fold.mean()),
-        "std": float(M.std(axis=0).mean()),
+        "std": std,
         "best": float(M.min(axis=1).mean()),
         "avg_std_per_fold": float(avg_per_fold.std(ddof=1)) if len(avg_per_fold) > 1 else float("nan"),
     }

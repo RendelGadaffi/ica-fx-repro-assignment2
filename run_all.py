@@ -74,14 +74,11 @@ def get_dataset(name):
         return dict(X=X, t=t, splits=splits, fc=fc, sphere=False, n_inits=1)
     if name == "boston":
         X, t = load_boston()
-        splits = [(np.array(a), np.array(b))
-                  for a, b in train_test_split(np.arange(len(X)), test_size=0.1,
-                                               train_size=0.9, random_state=SEED,
-                                               shuffle=True)]
-        for s in range(1, 10):
-            a, b = train_test_split(np.arange(len(X)), test_size=0.1, train_size=0.9,
-                                    random_state=SEED + s, shuffle=True)
-            splits.append((a, b))
+        splits = []
+        for s in range(10):
+            tr, te = train_test_split(np.arange(len(X)), test_size=0.1, train_size=0.9,
+                                      random_state=SEED + s, shuffle=True)
+            splits.append((tr, te))
         fc = {m: [1, 3, 5, 7, 9, 11, 13] for m in ["PCA", "SIR", "PHD", "ICA-FX"]}
         fc["MLR"] = [1]
         fc["Original"] = [13]
@@ -211,6 +208,12 @@ def main():
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     all_results = {}
+    if os.path.exists(args.out):  # resume: merge with previous results
+        try:
+            with open(args.out) as f:
+                all_results = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
     for ds_name in args.datasets:
         ds = get_dataset(ds_name)
         jobs = []

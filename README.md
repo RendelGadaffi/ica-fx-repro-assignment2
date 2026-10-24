@@ -62,8 +62,8 @@ automatically from the UCI repository on first use.
 3. **Numerical stability.** Row normalization of W during the online updates (the scale of
    u is arbitrary in ICA); the 500-epoch, µ = 0.02 schedule is kept exactly as published.
 4. **Solvers.** The paper's MLP uses Levenberg–Marquardt (MATLAB); we use sklearn's L-BFGS
-   quasi-Newton with three inits per hidden size, best-on-test selection as in the paper.
-   SVM defaults are sklearn's (libsvm-compatible C/ε/coef0).
+   quasi-Newton solver, best-on-test selection as in the paper. SVM defaults are sklearn's
+   (libsvm-compatible C/ε/coef0).
 5. **Not specified in the paper:** number of SIR slices (we use the standard 10), the k-NN
    kernel exponent κ, the sphering regularization, the MLP weight init, random seeds
    (ours: 42; all runs reproducible via `SEED` in `run_all.py`).

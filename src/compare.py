@@ -13,7 +13,7 @@ Outputs:
 import json
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RES = os.path.join(HERE, "results", "results.json")
 
 from paper_tables import DATASETS  # noqa: E402
@@ -26,10 +26,11 @@ def main():
     out = {}
     for ds_name, paper in DATASETS.items():
         out[ds_name] = []
+        raw_ds = raw.get(ds_name, {})
         for method, Ms in paper.items():
             for M, (p_avg, p_sd, p_best) in Ms.items():
                 key = f"{method}|{M}"
-                ours = raw[ds_name].get(key)
+                ours = raw_ds.get(key)
                 if ours is None:
                     continue
                 flag = False
