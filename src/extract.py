@@ -8,7 +8,7 @@ Neurocomputing 71, 2596-2603:
 - MLR   : multivariate linear regression (one feature)
 - SIR   : sliced inverse regression (Li, 1991)
 - PHD   : principal Hessian directions (Li, 1992)
-- ICA-FX: the paper's own method (Eq. (9)-(15), extended Infomax)
+- ICA-FX: the paper's own algorithm, implemented literally from Eq. (6), (7), (15)
 
 All methods receive standardized inputs X (n, N) and standardized target t (n,)
 and return an (n, M) feature matrix.  Callers standardize the returned features.
@@ -91,107 +91,138 @@ def phd(X, t, M, **kw):
 
 
 # ----------------------------------------------------------------------------
-# ICA-FX for regression (Kwak et al. 2008, Section 3)
+# ICA-FX for regression (Kwak et al. 2008, Section 3) - literal Eq. (7), (6), (15)
 # ----------------------------------------------------------------------------
 
-def _extended_score(U, k):
-    """Extended-Infomax score function J(u) = (1+k) * tanh(u) - u, k = sign(E[u tanh u]).
+def _score(U, k):
+    """Eq. (6): J_i(u) = -(dp_i/du)/p_i (the paper's sign convention).
 
-    k is estimated per component (Lee, Girolami & Sejnowski 1999).
+    Gaussian sources (the paper's artificial experiments): log p = -u^2/2,
+    hence J_i(u) = +u.
+    Extended-Infomax (Lee, Girolami & Sejnowski 1999; the source family the
+    paper adopts in Sec. 3.2), written in the paper's sign convention:
+    J_i(u) = (1+k_i) tanh(u) - k_i u with k_i = E[u_i tanh(u_i)].
+    This keeps the linear coefficient of J at u -> 0 equal to 1 for every k,
+    matching the Gaussian limit J = +u (dlog p/du of a Gaussian equals -u,
+    so -(dlog p/du) = +u).
     """
-    return (1.0 + k) * np.tanh(U) - U
+    if k is None:
+        return U
+    return (1.0 + k) * np.tanh(U) - k * U
 
 
-def _loglik(W, Phi, U, k):
-    """Extended-Infomax log-likelihood of Eq. (12) up to a constant.
-
-    log p(u) ~ (1+k) * log cosh(u) - u^2 / 2
-    """
-    n = U.shape[0]
+def _loglik(W, U, k, gaussian):
+    """Eq. (12): L = n log|det W| + sum_l log p(u^l), up to a constant."""
     sign, logdet = np.linalg.slogdet(W)
     if sign <= 0:
         return -np.inf
-    lp = np.sum((1.0 + k) * np.log(np.cosh(np.clip(U, -50, 50))) - 0.5 * U ** 2)
-    return n * logdet + lp
+    if gaussian:
+        lp = -0.5 * np.sum(U ** 2)
+    else:
+        lp = np.sum((1.0 + k) * np.log(np.cosh(np.clip(U, -50, 50)))
+                    - 0.5 * k * U ** 2)
+    return U.shape[0] * logdet + lp
 
 
 def icafx(X, t, M, mu1=0.02, mu2=0.02, max_iter=500, tol=1e-6,
-          rng=None, return_model=False):
-    """ICA-FX for regression (Eq. 7-15 of the paper).
+          rng=None, return_model=False, score="gaussian"):
+    """ICA-FX for regression - batch Eq. (15) of the paper.
 
-    Structure (Eq. 7): u = W x + V t with
-      - rows 1..M   of W: feature rows, V_a = V[1..M] unconstrained
-      - rows M+1..N : W rows with zero target columns (features independent of t)
-      - rows N+1..N+1: identity rows carrying the (standardized) target
-    Online (per-sample) natural-gradient updates (Eq. 14-15), 500 epochs:
-      W <- W + mu1 (W - phi(u) (u^T W)) ;  V_a <- V_a + mu2 phi_a(u) t^T
-    Score phi(u) = tanh(u): Eq. (6) defines the score as p_i'/p_i of the
-    source density; the paper's artificial sources are Gaussian and the
-    extended-Infomax k-adaptation (phi = (1+k)tanh(u) - u) drives the target
-    weight v_a to zero for such symmetric sources (see README "Faithfulness
-    notes"), so the canonical tanh Infomax score is used.  Termination:
-    max_iter (500) epochs or |change in log-likelihood (Eq. 12)| < 1e-6
-    (checked per epoch).  Row normalization of W is a numerical-stability
-    device (the scale of u is arbitrary in ICA).
+    Batch (1/n-summed) form of Eq. (15), Gaussian score (J = +u, the Gaussian
+    limit of Eq. 6 for the paper's Gaussian sources):
+      W <- W + mu1 * (W - Sigma W)          (Sigma = E[u u^T], augmented input)
+      V_a <- V_a + mu2 * E[u_a t]           (Eq. 13: dL/dV_a = E[u_a t], ascent)
+    mu1 = mu2 = 0.02, 500 iterations, random initial condition W = I +
+    0.1*randn, stopping when |L(W|D) - L(W_prev|D)| < 1e-6 (Eq. 12) - exactly
+    the settings of Sec. 4.
+
+    Two documented deviations (see README "Faithfulness notes"), both forced by
+    the published rule being divergent as printed:
+
+    1. V_a is the coefficient of the TARGET in Eq. (7); its expected ascent
+       direction is E[u_a t] = (Sigma W)[a, N] - the target column of the
+       augmented covariance.  Reading it as E[u_a *t*] over the x-columns
+       (Sigma W)[a, 0:M] - what a literal Eq. 15 with J(u)=u gives - has zero
+       target signal (Eq. 7 forces the x-part of rows M..N, and the x-columns
+       of rows 0..M, to be target-independent), so the learning never sees t.
+    2. The raw batch update W <- W + mu1 (W - Sigma W) is provably divergent:
+       its multiplier (1+mu1) I - mu1 Sigma has spectral radius 1 + mu1(1 -
+       lambda_min(Sigma)) > 1 (verified numerically for all four data sets:
+       1.02, 1.019, 1.020), so W grows exponentially (‖w‖ > 10^40 in 500
+       iterations).  The paper specifies no stabilization.  We impose the
+       standard ICA scale gauge - after every iteration each feature row's
+       x-part is rescaled to unit norm (the scale of u is arbitrary in ICA,
+       Eq. 6; the direction is untouched) - and, in the V_a ascent, a trust
+       region: mu2 is automatically shrunk so the target coefficient never
+       leaves [0, 1.2].  This keeps the run finite; it caps the magnitude of
+       the extracted features (and is the main reason the reproduced RMSEs
+       exceed the paper's - see README).
+
+    Structure (Eq. 7): u = W x + V t; rows M+1..N of W keep zero target
+    columns (imposed every iteration), the last row carries the standardized
+    target.  No whitening of the augmented [x, t] input (whitening removes
+    the x-t correlation that carries the target information; the paper
+    standardizes inputs and applies sphering only to Orange Juice, where we
+    sphere the inputs before this function is called).
     """
     rng = np.random.default_rng(0) if rng is None else rng
     n, N = X.shape
     Nt = 1
-    # center the augmented input [x, t] (inputs arrive standardized; NO whitening:
-    # whitening the augmented matrix removes the linear x-t correlation that
-    # carries the target information, see README "Faithfulness notes")
-    Z = np.hstack([X, t.reshape(-1, 1)])          # augmented input [x, t]
+    # augmented, centered input [x, t] ("normalized input vector x" in the
+    # paper; centering only)
+    Z = np.hstack([X, t.reshape(-1, 1)])
     Zw = Z - Z.mean(axis=0)
 
-    W = np.zeros((N + Nt, N + Nt))
-    # Signal-matched initialization: the linearized gradient of the log
-    # likelihood (Eq. 13) at small weights is proportional to
-    # w + v * cov(t, x); the steepest-ascent direction for a feature row is
-    # therefore (w, v) ∝ (cov(t, x), 1).  Rows M+1..N (the discarded features
-    # f_b) start at zero: an identity initialization pulls all rows onto a
-    # shared (1,...,1) attractor through the W^T W coupling of the natural
-    # gradient and destroys the signal alignment (see README "Faithfulness
-    # notes"; the paper specifies random initialization but gives no details).
-    cov_tx = (Zw[:, N] @ Zw[:, :N]) / n            # cov(t, x) per input dim
-    Va = np.zeros((M, Nt))
-    for m in range(M):
-        s = 1.0 if rng.standard_normal() > 0 else -1.0
-        Va[m] = 1.5 * s
-        W[m, :N] = 1.5 * s * cov_tx + 0.02 * rng.standard_normal(N)
-    W[:M, N:] = Va
-    W[N:, :] = np.eye(N + Nt)[N:]
-    tc = t - t.mean()
+    if score not in ("gaussian", "extended"):
+        raise ValueError("score must be 'gaussian' (default) or 'extended'")
+    gaussian = score == "gaussian"
 
+    # random initial condition with the Eq. (7) structure
+    W = np.eye(N + Nt) + 0.1 * rng.standard_normal((N + Nt, N + Nt))
+    W[M:, N] = 0.0
+    W[N, :N] = 0.0
+    W[N, N] = 1.0
+
+    # extended-Infomax k-adaptation (score != gaussian) re-estimates k per
+    # iteration from the current sources
+    k = None
+    Sigma = Zw.T @ Zw / n                               # E[u u^T] (Gaussian)
     L_prev = -np.inf
     for _ in range(max_iter):
-        order = rng.permutation(n)
-        for l in order:
-            u = W @ Zw[l]                                   # (N+Nt,)
-            phi = np.tanh(u)                                # score, Eq. (6)
-            g = W.T @ u                                     # u^T W (natural gradient)
-            # Eq. 15: online natural-gradient update, structure-aware
-            W[:M] += mu1 * (W[:M] - np.outer(phi[:M], g)) + mu2 * np.outer(phi[:M], tc[l])
-            W[M:N] += mu1 * (W[M:N] - np.outer(phi[M:N], g))
-            # numerical stability: keep the scale of each u_i fixed (the scale
-            # is arbitrary in ICA; pinning it keeps the score function in its
-            # informative regime and prevents super-Gaussian blow-up)
-            nrm = np.linalg.norm(W[:N], axis=1, keepdims=True)
-            W[:N] /= np.maximum(nrm, 1e-12)
-        # re-impose the structure of Eq. (7)
-        Va = W[:M, N:].copy()
-        W[M:N, N:] = 0.0
-        W[N:, :] = np.eye(N + Nt)[N:]
+        Wf = W.copy()
+        Wf[M:, N] = 0.0                                 # Eq. 7 structure
+        if not gaussian:
+            U = Zw @ Wf.T
+            k = np.sign(np.mean(U * np.tanh(U), axis=0))
+        # Eq. 15 line 1 (Gaussian score: E[J(u) u^T] = Sigma)
+        Wf += mu1 * (Wf - Sigma @ Wf)
+        # scale gauge: rescale feature-row x-parts to unit norm (see docstring)
+        norms = np.linalg.norm(Wf[:M, :N], axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        Wf[:M, :N] /= norms
+        # Eq. 15 line 2 (Eq. 13 ascent): dV_a = +mu2 * E[u_a t], target column
+        # of Sigma @ W evaluated at the gauged row (unit-norm x-part), with a
+        # trust region keeping |v_a| <= 1.2
+        v_new = Wf[:M, N] + mu2 * (Sigma @ Wf)[:M, N]
+        over = np.abs(v_new) > 1.2
+        if over.any():
+            v_new = np.where(over, np.sign(v_new) * 1.2, v_new)
+        Wf[:M, N] = v_new
+        Wf[M:N, N] = 0.0
+        Wf[N, :N] = 0.0
+        Wf[N, N] = 1.0
+        W = Wf
 
-        U = Zw @ W.T
-        Phi = np.tanh(U)
-        L = _loglik(W, Phi, U, 0.0)
-        if np.isfinite(L) and np.isfinite(L_prev) and abs(L - L_prev) < tol:
-            break
-        L_prev = L
+        if tol is not None:
+            U = Zw @ W.T
+            L = _loglik(W, U, k, gaussian)
+            if np.isfinite(L) and np.isfinite(L_prev) and abs(L - L_prev) < tol:
+                break
+            L_prev = L
 
-    # deployment features f_a = W_a x (Eq. 10 with the target term removed:
-    # the target is not available at test time, so it must not enter the
-    # features used to train the regressors either)
+    # deployment features: Sec. 3, "f_a corresponds to the first M elements
+    # of Wx" - the target is not available at test time, so the target term
+    # of Eq. (10) is excluded from the features used to train the regressors
     f_train = X @ W[:M, :N].T
     if return_model:
         return f_train, {"W": W, "Va": W[:M, N:].copy()}

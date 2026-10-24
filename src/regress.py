@@ -57,7 +57,7 @@ def run_regressors(Xtr, ytr, Xte, yte):
     for h in HIDDEN:
         for seed in MLP_SEEDS:
             m = MLPRegressor(hidden_layer_sizes=(h,), activation="tanh",
-                             solver="lbfgs", alpha=1e-4, max_iter=1000,
+                             solver="lbfgs", alpha=1e-4, max_iter=200,
                              tol=1e-5, random_state=seed)
             m.fit(Xtr_s, ytr_s)
             r = _rmse(yte_s, m.predict(Xte_s))

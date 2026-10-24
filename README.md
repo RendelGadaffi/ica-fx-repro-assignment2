@@ -50,7 +50,8 @@ automatically from the UCI repository on first use.
    closes) and w locks onto the amplified initialization noise. We verified convergence to a
    symmetric attractor w ∝ (1,…,1) from random, identity and zero initializations, and for
    sign- and continuous-k variants and for large v_a. Our implementation therefore uses the
-   canonical tanh Infomax score, which keeps the target channel open. The paper's published
+   canonical Gaussian score J(u) = +u (Eq. 6 for Gaussian sources), which keeps the
+   target channel open. The paper's published
    MATLAB code was never released, so the exact score/initialization used by the authors
    cannot be recovered; this is the main source of the ICA-FX deviations reported in the
    comparison tables (see `results/comparison.md`, cells marked ✗ = |ours − paper| > 3·SD).
@@ -59,8 +60,22 @@ automatically from the UCI repository on first use.
    which destroys the signal channel; the paper specifies standardization ("normalized
    input vector") and applies sphering only to the small-sample Orange Juice data (we
    follow that, with a small ridge regularization λ = 1e-9 on the covariance).
-3. **Numerical stability.** Row normalization of W during the online updates (the scale of
-   u is arbitrary in ICA); the 500-epoch, µ = 0.02 schedule is kept exactly as published.
+3. **Batch form and numerical stability.** Eq. (15) is applied in its batch
+   (1/n-summed) form, one update per iteration, 500 iterations, µ1 = µ2 = 0.02,
+   as published. The raw batch rule as printed, W ← W + µ(W − ΣW), is provably
+   divergent: its multiplier (1+µ)I − µΣ has spectral radius 1 + µ(1 −
+   λ_min(Σ)) > 1 (measured 1.020 linear / 1.019 nonlinear / 1.019 Boston /
+   1.020 OJ), so ‖w‖ grows exponentially (≈10^40 in 500 iterations) and the
+   extracted features become numerically unusable; the paper specifies no
+   stabilization. Our implementation (a) reads the V_a line as the ascent
+   gradient of Eq. (13), E[u_a t] (the target column of ΣW — the literal
+   x-columns reading carries zero target information by the Eq. 7 structure),
+   with a trust region |v_a| ≤ 1.2, and (b) rescales each feature row's x-part
+   to unit norm after every iteration (the scale of u is arbitrary in ICA,
+   Eq. 6; the direction is untouched). These keep the published rule finite
+   and recover the paper's learned direction (cos 0.98 with the published
+   feature f1, linear data, M=1) while capping feature magnitude, which is
+   the main source of the RMSE deviations in the tables.
 4. **Solvers.** The paper's MLP uses Levenberg–Marquardt (MATLAB); we use sklearn's L-BFGS
    quasi-Newton solver, best-on-test selection as in the paper. SVM defaults are sklearn's
    (libsvm-compatible C/ε/coef0).
@@ -70,8 +85,10 @@ automatically from the UCI repository on first use.
 
 ## Results
 
-See `results/` — `results.json` (raw numbers), `comparison.md` / `comparison.json`
-(ours vs. paper, with 3σ flags). The report (PDF/DOCX) summarizes the findings:
-the four baseline methods reproduce the published values within ≈1 SD, confirming the
-shared pipeline; ICA-FX reproduces qualitatively (features partially aligned with the
-informative direction) with the deviations explained above.
+See `results/` — `results.json` (raw numbers for every method × M cell of
+the paper's Tables 1–4) and `comparison.md` / `comparison.json` (ours vs.
+paper, with 3σ-cross flags). Findings: the four baseline methods (PCA, MLR,
+SIR, PHD) reproduce the published values within ≈1 SD, confirming the shared
+pipeline; ICA-FX reproduces qualitatively (informative direction recovered,
+best cells near the paper's best) with systematic deviations explained by the
+faithfulness notes above.
