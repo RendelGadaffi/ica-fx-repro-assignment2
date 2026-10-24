@@ -54,7 +54,9 @@ automatically from the UCI repository on first use.
    target channel open. The paper's published
    MATLAB code was never released, so the exact score/initialization used by the authors
    cannot be recovered; this is the main source of the ICA-FX deviations reported in the
-   comparison tables (see `results/comparison.md`, cells marked ✗ = |ours − paper| > 3·SD).
+   comparison tables (see `results/comparison.md`; cells marked ✗ = |ours −
+   paper| > 3·SD, and on Table 4, where the paper publishes no SDs for the
+   baselines, a factor-2 magnitude flag).
 2. **No whitening of the augmented input.** Whitening [x, t] makes the standardized target
    orthogonal to the inputs (for the linear toy problem t is 99.9% predictable from x),
    which destroys the signal channel; the paper specifies standardization ("normalized
@@ -74,8 +76,17 @@ automatically from the UCI repository on first use.
    to unit norm after every iteration (the scale of u is arbitrary in ICA,
    Eq. 6; the direction is untouched). These keep the published rule finite
    and recover the paper's learned direction (cos 0.98 with the published
-   feature f1, linear data, M=1) while capping feature magnitude, which is
-   the main source of the RMSE deviations in the tables.
+   feature f1, linear data, M=1). Feature-row scale is NOT the source of the
+   RMSE deviations: sweeping the post-hoc row norm from 1 to 30 (the paper's
+   published weights are order 10) leaves every RMSE identical, because all
+   five regressors standardize their inputs. We reproduced the published
+   numbers under every faithful reading we could construct (online vs batch
+   updates, both V_a signs, tanh / extended-Infomax / Gaussian scores, with
+   and without whitening and scale gauges): all land near the full-basis
+   baseline (linear avg ≈ 0.55–2.47), far from the paper's 0.12. The
+   published specification is therefore insufficient to reproduce the
+   reported ICA-FX numbers; the missing MATLAB implementation details
+   (score, initialization, stabilization) are the cause.
 4. **Solvers.** The paper's MLP uses Levenberg–Marquardt (MATLAB); we use sklearn's L-BFGS
    quasi-Newton solver, best-on-test selection as in the paper. SVM defaults are sklearn's
    (libsvm-compatible C/ε/coef0).
