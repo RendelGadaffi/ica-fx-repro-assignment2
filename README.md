@@ -66,9 +66,13 @@ automatically from the UCI repository on first use.
    5000-iteration budget with the paper's log-likelihood stopping rule (Eq. 12). Our
    converged features are the informative directions the theory predicts — they reproduce
    the printed feature vectors of Sec. 4.1.1 at cosine 0.999 — and the comparison tables
-   report these converged runs. This makes some of our cells *better* than the paper's (the
-   linear data at small M): fully converged features beat features stopped after 500
-   iterations.
+   report these converged runs. In other words: the features converge at ≈5000 iterations
+   (by then the cell values are independent of the random initialization — verified over
+   5 initializations per cell, spread <0.5%), while the paper's published numbers come
+   from its 500-iteration budget. This makes some of our cells *better* than the paper's
+   (the linear data at small M): fully converged features beat features stopped after 500
+   iterations, where the result is still dominated by the start (linear M=1: 0.75 at 500
+   iterations, 0.16 converged).
 4. **Batch form and numerical stability.** Eq. (15) is applied in batch (1/n-summed) form.
    The raw batch rule as printed, W ← W + µ(W − ΣW), is divergent on all four data sets:
    its multiplier (1+µ)I − µΣ has spectral radius 1 + µ(1 − λ_min(Σ)) > 1 (measured 1.019–
