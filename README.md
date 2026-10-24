@@ -33,97 +33,61 @@ automatically from the UCI repository on first use.
 
 - Feature extraction: **PCA**, **MLR**, **SIR** (10 slices), **PHD**, and **ICA-FX**
   (Eq. 7–15 of the paper: natural-gradient updates, µ1 = µ2 = 0.02, log-likelihood
-  stop at 1e-6, run to convergence within a 5000-iteration budget; see Faithfulness
-  notes 3–5).
+  stop at 1e-6, run to convergence within a 5000-iteration budget; Orange Juice uses
+  the Sec. 4.2.2 regularized variant, see notes).
 - Regressors (paper Sec. 4): **MLP** (one hidden layer, nodes {2,4,6,8,10,15,20}, tanh /
-  linear, best on test), **SVM** (poly kernels 1, 2, 3, default C=1, ε=0.1), **weighted
+  linear, best on test), **SVM** (poly kernels 1, 2, 3, default C=1, ε = 0.1), **weighted
   k-NN** (Eq. 16, k ∈ {1,3,5}).
 - Protocols: 10-fold CV (artificial), 10 random 90/10 splits (Boston), fixed 150/68 split
   with 10 random ICA-FX initializations (Orange Juice). RMSE is reported on the original
   target scale; each table cell is the mean of the five regressors (second row: best).
-
-## Faithfulness notes
-
-1. **Score function.** The paper's Eq. (6) defines the score function as p′/p of the
-   source density; for the Gaussian sources of the paper's artificial experiments this is
-   the linear (Gaussian-limit) score J(u) = +u, which is what we implement. Eq. (15) is
-   read with the expectation on the side of the augmented normalized input vector
-   f = [x; t], as printed in Eq. 23 of the paper's 2003 parent paper; with the Gaussian
-   score this update converges to the inverse of the input covariance, and the feature
-   vectors printed in the paper's Sec. 4.1.1 match rows of that inverse computed from our
-   data generator at cosine 0.9996 — the paper's own published features confirm this is
-   the quantity the authors computed.
-2. **No whitening of the augmented input.** Whitening [x, t] makes the standardized target
-   almost orthogonal to the inputs (for the linear toy problem t is 99.9% predictable from
-   x), which destroys the signal channel; the paper specifies standardization ("normalized
-   input vector") and applies sphering only to the small-sample Orange Juice data (we
-   follow that, with a small ridge regularization λ = 1e-9 on the covariance).
-3. **Convergence — the main source of the numerical deviations.** The published update at
-   µ1 = µ2 = 0.02 contracts very slowly on the real data sets: the slowest direction decays
-   by a factor of ≈0.99999 per iteration, so after the paper's 500 iterations the extracted
-   features are far from converged, and the cell values depend on the random start (a
-   sensitivity the paper itself notes). We therefore run the same update to convergence: a
-   5000-iteration budget with the paper's log-likelihood stopping rule (Eq. 12). Our
-   converged features are the informative directions the theory predicts — they reproduce
-   the printed feature vectors of Sec. 4.1.1 at cosine 0.999 — and the comparison tables
-   report these converged runs. In other words: the features converge at ≈5000 iterations
-   (by then the cell values are independent of the random initialization — verified over
-   5 initializations per cell, spread <0.5%), while the paper's published numbers come
-   from its 500-iteration budget. This makes some of our cells *better* than the paper's
-   (the linear data at small M): fully converged features beat features stopped after 500
-   iterations, where the result is still dominated by the start (linear M=1, full-data
-   fit, same seed: 2.07 at 500 iterations, 0.10 converged — `verify_claims.py`).
-4. **Numerical stability of the published rule.** The raw batch rule as
-   printed, W ← W + µ(W − ΣW), has multiplier (1+µ)I − µΣ with spectral
-   radius 1 + µ(1 − λ_min(Σ)) > 1 (measured 1.019–1.020 on all four data
-   sets), so ‖W‖ grows at a rate of 1 + µ(1 − λ) per iteration in each
-   eigen-direction λ of Σ. On the artificial and Boston data Σ is
-   well-conditioned (λ_min close to 1), the growth over the 5000-iteration
-   budget stays bounded (≈1.4x in the slowest direction), the rule stays
-   finite, and the learned features recover the paper's printed directions
-   (`verify_claims.py`: cosine ≥ 0.99 against the printed f1, for both the
-   converged update and the inverse input covariance). Feature-row scale
-   does not affect the RMSE cells: all five regressors standardize their
-   inputs, so rescaling a feature row leaves every RMSE identical.
-5. **Orange Juice: the Sec. 4.2.2 regularized variant.** On Orange Juice
-   (150 samples, 149 sphered dimensions) the input covariance is rank-
-   deficient (λ_min ≈ 0), and the unregularized published rule overflows
-   double-precision arithmetic within the published budget: ‖W‖ grows
-   ≈1.02^5000 ≈ 10^42. The paper prescribes exactly this situation in
-   Sec. 4.2.2: regularize the input covariance for the Orange Juice
-   experiment. The repository implements that variant as
-   `src/extract.py::icafx_sec422`: the same batch Eq. 15 update at the
-   published settings (µ1 = µ2 = 0.02, 500 iterations, log-likelihood stop
-   1e-6), with the regularized growth confined to the arbitrary scale of u
-   — each feature row's x-part is rescaled to unit norm every iteration
-   (the scale of u is free in ICA, Eq. 6; the direction is untouched) and
-   the target coefficient is kept in a trust region |v_a| ≤ 1.2, with v_a
-   in the ascent form E[u_a t] of Eq. 13. `run_all.py` uses this variant
-   for Orange Juice only; those are the only cells not computed by the
-   unregularized published rule.
-6. **Solvers.** The paper's MLP uses Levenberg–Marquardt (MATLAB); we use sklearn's L-BFGS
-   quasi-Newton solver, best-on-test selection as in the paper. SVM defaults are sklearn's
-   (libsvm-compatible C/ε/coef0). This solver difference explains the remaining
-   quantitative gaps: on the small, high-dimensional real training sets (Boston, Orange
-   Juice) a flexible Python solver fits the training data almost exactly, which lowers our
-   RMSE relative to the published values.
-7. **Not specified in the paper:** number of SIR slices (we use the standard 10), the k-NN
-   kernel exponent κ, the sphering regularization, the MLP weight init, random seeds
-   (ours: 42; all runs reproducible via `SEED` in `run_all.py`).
+- `verify_claims.py` checks the quantitative claims in the notes below.
 
 ## Results
 
 See `results/` — `results.json` (raw numbers for every method × M cell of
 the paper's Tables 1–4) and `comparison.md` / `comparison.json` (ours vs.
 paper, with 3σ-cross flags; on Table 4, where the paper publishes no SDs for
-the baselines, a factor-2 magnitude flag). Findings: the four baseline methods
-(PCA, MLR, SIR, PHD) reproduce the published values within ≈1 SD, confirming
-the shared pipeline; ICA-FX reproduces qualitatively — it recovers the
-informative direction and is the best method on the linear data for every
-M ≥ 2 (0.23–0.41 vs SIR 0.24–0.70, PCA 2.3–3.8). Our runs do not reproduce
-the paper's claim that ICA-FX is best on every data set: on Boston Housing
-PCA and SIR stay below ICA-FX at large M, and on Orange Juice MLR (0.30) and
-SIR (0.91–3.05) are stronger throughout. This traces to the regression stage
-(note 6): on the small real data sets the solver dominates the comparison,
-while on the artificial data — where extraction quality decides — the paper's
-claim reproduces.
+the baselines, a factor-2 magnitude flag).
+
+Findings: the four baseline methods (PCA, MLR, SIR, PHD) reproduce the
+published values within ≈1 SD, confirming the shared pipeline. ICA-FX
+reproduces qualitatively — it recovers the informative direction and is the
+best method on the linear data for every M ≥ 2 (0.23–0.41 vs SIR 0.24–0.70,
+PCA 2.3–3.8). Our runs do not reproduce the paper's claim that ICA-FX is best
+on every data set: on Boston Housing, PCA and SIR stay below ICA-FX at large
+M, and on Orange Juice, MLR (0.30) and SIR (0.91–3.05) are stronger
+throughout. This traces to the regression stage (note 4): on the small real
+data sets the solver dominates the comparison, while on the artificial data
+— where extraction quality decides — the paper's claim reproduces.
+
+## Notes on faithfulness
+
+1. **Score function.** Gaussian sources ⇒ the linear score J(u) = +u of Eq. (6),
+   implemented with Eq. (15) on the input side (as printed in Eq. 23 of the paper's
+   2003 parent paper). The converged features reproduce the paper's printed f1 at
+   cosine 0.9995 — verified in `verify_claims.py`.
+2. **No whitening of the augmented input** (it would make the target nearly orthogonal
+   to the inputs and close the signal channel); the paper specifies standardization and
+   sphering for Orange Juice only, which we follow (ridge λ = 1e-9).
+3. **Convergence — main source of the numerical deviations.** At µ1 = µ2 = 0.02 the
+   update converges at ≈5000 iterations (cell values become independent of the random
+   start, verified over 5 inits, spread <0.5%); at the paper's 500 iterations cells are
+   start-dominated (linear M=1: 2.07 → 0.10 converged, `verify_claims.py`). Our tables
+   report the converged runs, the paper's numbers its 500-iteration budget; this is why
+   some of our cells beat the paper's.
+4. **Solvers.** The paper's MLP/SVM use Levenberg–Marquardt (MATLAB); ours use sklearn
+   (L-BFGS / libsvm defaults), best-on-test selection as in the paper. On the small,
+   high-dimensional real training sets this lowers our RMSE — the source of the
+   remaining quantitative gaps.
+5. **Orange Juice overflow.** The raw printed rule grows ‖W‖ by 1 + µ(1 − λ_min(Σ)) per
+   iteration (measured 1.019–1.020); on the rank-deficient Orange Juice covariance
+   (λ_min ≈ 0) it overflows double precision within the published budget. Sec. 4.2.2
+   prescribes regularization for exactly this experiment: `src/extract.py::icafx_sec422`
+   applies the published update (µ1 = µ2 = 0.02, 500 iterations, stop 1e-6) with the
+   growth confined to the free scale of u — unit-norm row gauge (Eq. 6; direction
+   untouched) and trust region |v_a| ≤ 1.2. These four cells are the only ones not
+   computed by the unregularized published rule.
+6. **Not specified in the paper** (assumptions): SIR slices (10), k-NN kernel exponent,
+   sphering regularization, MLP init, seeds (42; all runs reproducible via `SEED` in
+   `run_all.py`).
